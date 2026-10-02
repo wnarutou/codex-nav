@@ -1,0 +1,15 @@
+{
+  "name": "codex-nav",
+  "version": "0.1.0",
+  "description": "A mobile-terminal-friendly workspace and session navigator for Codex CLI.",
+  "bin": {
+    "cx": "bin/codex-nav.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,132 @@
+# codex-nav
+
+A small Windows-first terminal navigator for Codex CLI.
+
+It is designed for phone/remote terminal use where a simple numbered menu is more reliable than a full-screen TUI. It reuses HAPI's existing workspace/session metadata without writing to HAPI's database.
+
+## Features
+
+- Discovers HAPI workspace roots from `~/.hapi/runner.state.json`.
+- Lists projects under the configured workspace root.
+- Reads active sessions from Codex's native `~/.codex/sessions` store; archived sessions stay out of the active menu.
+- Reads `~/.hapi/hapi.db` in **read-only** mode to enrich titles/worktree metadata.
+- Groups HAPI/Codex sessions by base project.
+- Shows session title, last update time, worktree and branch information.
+- Resumes a saved Codex session.
+- Archives a saved Codex session through the official Codex CLI.
+- Starts a new Codex session in the main project directory.
+- Creates a Git worktree + branch and starts Codex there.
+- Creates new workspace directories and can initialize Git.
+- Uses `--no-alt-screen` for Codex interactive sessions, which is friendlier to mobile terminals.
+
+## Requirements
+
+- Windows
+- Node.js 22+ (Node 24 recommended)
+- Git
+- Codex CLI available on `PATH`
+- HAPI, if you want HAPI session discovery
+
+No npm runtime dependencies are required.
+
+## Install
+
+Clone the repository and install the CLI globally from the local checkout:
+
+```powershell
+git clone https://github.com/wnarutou/codex-nav.git
+cd codex-nav
+npm install -g .
+```
+
+Then open your terminal and run:
+
+```text
+cx
+```
+
+For local development without global installation:
+
+```powershell
+node .\bin\codex-nav.js
+```
+
+## Typical flow
+
+```text
+codex-nav
+------------
+
+1. joinquant  (12 sessions)
+2. gitrieve   (5 sessions)
+3. lottery    (3 sessions)
+
+[N] New workspace directory
+[Q] Quit
+> 1
+```
+
+Inside a project:
+
+```text
+1. Session title A  [hapi-1002-abcd]  2026-10-02 22:30
+2. Session title B  [main]            2026-10-01 18:15
+
+[N] New Codex session in this project
+[W] New worktree + branch + Codex session
+[B] Back
+[Q] Quit
+```
+
+## HAPI integration
+
+`codex-nav` treats Codex's own active session store as the source of truth and HAPI as a read-only metadata source. This means sessions created directly from `codex-nav` remain visible even if HAPI did not create them.
+
+It reads:
+
+- `~/.hapi/runner.state.json`
+- `~/.hapi/hapi.db`
+
+It does **not** update, delete, or otherwise modify `hapi.db`.
+
+Session actions are delegated to Codex itself:
+
+```text
+codex resume <session-id>
+codex archive <session-id>
+```
+
+Worktree creation is delegated to Git.
+
+## Worktree naming
+
+New worktrees are created beside the base repository:
+
+```text
+projects/
+  demo/
+  demo-worktrees/
+    1003-a1b2/
+```
+
+The corresponding branch is named:
+
+```text
+codex-1003-a1b2
+```
+
+## Tests
+
+```powershell
+npm test
+```
+
+## Notes
+
+This is an early version aimed at a specific workflow: Windows + HAPI + Codex CLI + remote/mobile terminal.
+
+The project deliberately keeps the UI simple and avoids cursor-driven full-screen interfaces so that it remains usable through remote terminal apps.
+
+## License
+
+MIT
