@@ -58,9 +58,9 @@ node .\bin\codex-nav.js
 codex-nav
 ------------
 
-1. joinquant  (12 sessions)
+1. testa      (12 sessions)
 2. gitrieve   (5 sessions)
-3. lottery    (3 sessions)
+3. testb      (3 sessions)
 
 [N] New workspace directory
 [Q] Quit
