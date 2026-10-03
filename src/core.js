@@ -77,6 +77,10 @@ function parseSessionRow(row) {
     title: summary,
     updatedAt: Number(row && row.updated_at ? row.updated_at : 0),
     active: Boolean(row && row.active),
+    hapiHostPid: Number.isInteger(Number(metadata.hostPid)) ? Number(metadata.hostPid) : 0,
+    hapiLifecycleState: metadata.lifecycleState ? String(metadata.lifecycleState) : '',
+    hapiStartedBy: metadata.startedBy ? String(metadata.startedBy) : '',
+    hapiMcpUrl: metadata.hapiMcpUrl ? String(metadata.hapiMcpUrl) : '',
   };
 }
 

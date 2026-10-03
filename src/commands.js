@@ -79,6 +79,111 @@ function sessionCwd(session) {
   return candidates.find((candidate) => candidate && fs.existsSync(candidate)) || process.cwd();
 }
 
+function inspectWindowsProcess(pid) {
+  if (process.platform !== 'win32' || !Number.isInteger(pid) || pid <= 0) return null;
+
+  const command = [
+    `$p=Get-CimInstance Win32_Process -Filter "ProcessId = ${pid}" -ErrorAction SilentlyContinue`,
+    'if ($null -ne $p) {',
+    '$p | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress',
+    '}',
+  ].join('; ');
+
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command],
+    {
+      stdio: 'pipe',
+      encoding: 'utf8',
+      shell: false,
+      windowsHide: true,
+    }
+  );
+
+  if (result.error || result.status !== 0 || !String(result.stdout || '').trim()) return null;
+
+  try {
+    return JSON.parse(String(result.stdout).trim());
+  } catch (_) {
+    return null;
+  }
+}
+
+function isExpectedHapiCodexProcess(processInfo) {
+  if (!processInfo || typeof processInfo !== 'object') return false;
+  const name = String(processInfo.Name || processInfo.name || '').toLowerCase();
+  const commandLine = String(processInfo.CommandLine || processInfo.commandLine || '');
+  return name === 'hapi.exe' && /hapi\.exe"?\s+codex(?:\s|$)/i.test(commandLine);
+}
+
+function getHapiOwnership(session) {
+  const pid = Number(session && session.hapiHostPid);
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return { owned: false, pid: 0, reason: 'no-hapi-pid' };
+  }
+
+  const processInfo = inspectWindowsProcess(pid);
+  if (!processInfo) {
+    return { owned: false, pid, reason: 'not-running' };
+  }
+
+  if (!isExpectedHapiCodexProcess(processInfo)) {
+    return { owned: false, pid, reason: 'pid-reused-or-unexpected-process', processInfo };
+  }
+
+  return { owned: true, pid, processInfo };
+}
+
+function sleepSync(milliseconds) {
+  const buffer = new SharedArrayBuffer(4);
+  const view = new Int32Array(buffer);
+  Atomics.wait(view, 0, 0, milliseconds);
+}
+
+function takeOverHapiSession(session) {
+  if (process.platform !== 'win32') {
+    throw new Error('HAPI takeover is currently supported on Windows only.');
+  }
+
+  const ownership = getHapiOwnership(session);
+  if (!ownership.owned) {
+    throw new Error('The HAPI owner is no longer running or could not be safely verified.');
+  }
+
+  let result = run(
+    'taskkill.exe',
+    ['/PID', String(ownership.pid), '/T'],
+    { stdio: 'pipe' }
+  );
+
+  for (let attempt = 0; attempt < 15; attempt += 1) {
+    if (!inspectWindowsProcess(ownership.pid)) {
+      sleepSync(300);
+      return ownership;
+    }
+    sleepSync(100);
+  }
+
+  result = run(
+    'taskkill.exe',
+    ['/PID', String(ownership.pid), '/T', '/F'],
+    { stdio: 'pipe' }
+  );
+
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!inspectWindowsProcess(ownership.pid)) {
+      sleepSync(300);
+      return ownership;
+    }
+    sleepSync(100);
+  }
+
+  const detail = String(result.stderr || result.stdout || '').trim();
+  throw new Error(
+    detail || `HAPI session process ${ownership.pid} is still running after takeover.`
+  );
+}
+
 function resumeSession(session) {
   const cwd = sessionCwd(session);
   runCodex(['resume', session.codexSessionId, '-C', cwd, '--no-alt-screen'], cwd);
@@ -167,6 +272,10 @@ function createWorkspaceDirectory(root, name, initializeGit = true) {
 module.exports = {
   resolveCodexInvocation,
   runCodexProcess,
+  inspectWindowsProcess,
+  isExpectedHapiCodexProcess,
+  getHapiOwnership,
+  takeOverHapiSession,
   runCodex,
   resumeSession,
   archiveSession,

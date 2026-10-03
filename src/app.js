@@ -19,6 +19,8 @@ const {
   isDirty,
   createWorktree,
   createWorkspaceDirectory,
+  getHapiOwnership,
+  takeOverHapiSession,
 } = require('./commands');
 
 function clear() {
@@ -54,8 +56,11 @@ async function sessionMenu(rl, session) {
     console.log(`Codex session: ${session.codexSessionId}`);
     console.log(`Path: ${session.path || session.baseProjectPath}`);
     if (session.branch) console.log(`Branch: ${session.branch}`);
+    const ownership = getHapiOwnership(session);
+    if (ownership.owned) console.log(`HAPI owner: PID ${ownership.pid} (running)`);
     console.log('');
     console.log('[R] Resume');
+    if (ownership.owned) console.log('[T] Take over from HAPI and resume');
     console.log('[A] Archive');
     console.log('[B] Back');
 
@@ -69,6 +74,28 @@ async function sessionMenu(rl, session) {
         rl.resume();
       }
       return;
+    }
+    if (action === 't' && ownership.owned) {
+      const confirm = (await rl.question(
+        `Stop HAPI session PID ${ownership.pid} and take over? [y/N] `
+      )).trim().toLowerCase();
+      if (confirm !== 'y' && confirm !== 'yes') continue;
+
+      try {
+        takeOverHapiSession(session);
+        console.log(`Stopped HAPI session PID ${ownership.pid}. Resuming in Codex...`);
+        rl.pause();
+        try {
+          resumeSession(session);
+        } finally {
+          rl.resume();
+        }
+        return;
+      } catch (error) {
+        console.log(`Takeover failed: ${error && error.message ? error.message : error}`);
+        await rl.question('Press Enter to continue...');
+        continue;
+      }
     }
     if (action === 'a') {
       const confirm = (await rl.question('Archive this session? [y/N] ')).trim().toLowerCase();

@@ -11,6 +11,7 @@ const {
   normalizePath,
 } = require('../src/core');
 const { meaningfulUserText, mergeSessions } = require('../src/sessions');
+const { isExpectedHapiCodexProcess } = require('../src/commands');
 
 test('extracts repeated workspace roots from HAPI runner argv', () => {
   const state = {
@@ -83,6 +84,50 @@ test('parses HAPI session metadata and groups newest first', () => {
   assert.equal(sessions[1].title, 'old');
 });
 
+test('parses HAPI process ownership metadata', () => {
+  const session = parseSessionRow({
+    id: 'h-owner',
+    updated_at: 300,
+    active: 0,
+    metadata: JSON.stringify({
+      path: 'C:\\projects\\demo',
+      codexSessionId: 'c-owner',
+      hostPid: 5128,
+      lifecycleState: 'running',
+      startedBy: 'runner',
+      hapiMcpUrl: 'http://127.0.0.1:64720/',
+    }),
+  });
+
+  assert.equal(session.hapiHostPid, 5128);
+  assert.equal(session.hapiLifecycleState, 'running');
+  assert.equal(session.hapiStartedBy, 'runner');
+});
+
+test('recognizes only HAPI Codex process command lines as takeover targets', () => {
+  assert.equal(
+    isExpectedHapiCodexProcess({
+      Name: 'hapi.exe',
+      CommandLine: 'C:\\tools\\hapi.exe codex --started-by runner',
+    }),
+    true
+  );
+  assert.equal(
+    isExpectedHapiCodexProcess({
+      Name: 'hapi.exe',
+      CommandLine: 'C:\\tools\\hapi.exe runner start',
+    }),
+    false
+  );
+  assert.equal(
+    isExpectedHapiCodexProcess({
+      Name: 'notepad.exe',
+      CommandLine: 'notepad.exe codex',
+    }),
+    false
+  );
+});
+
 
 test('ignores injected context when choosing a native Codex session title', () => {
   assert.equal(
@@ -122,6 +167,7 @@ test('HAPI metadata enriches native Codex sessions without duplicating them', ()
   assert.equal(merged[0].title, 'HAPI summary');
   assert.equal(merged[0].branch, 'hapi-1003-abcd');
   assert.equal(merged[0].hapiSessionId, 'h1');
+  assert.equal(merged[0].hapiHostPid || 0, 0);
 });
 
 test('HAPI-only rows do not resurrect archived Codex sessions', () => {

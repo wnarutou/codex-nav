@@ -140,6 +140,10 @@ function mergeSessions(codexSessions, hapiSessions) {
       baseProjectPath: hapi.baseProjectPath || nativeSession.baseProjectPath,
       branch: hapi.branch || nativeSession.branch,
       worktreeName: hapi.worktreeName || nativeSession.worktreeName,
+      hapiHostPid: hapi.hapiHostPid || 0,
+      hapiLifecycleState: hapi.hapiLifecycleState || '',
+      hapiStartedBy: hapi.hapiStartedBy || '',
+      hapiMcpUrl: hapi.hapiMcpUrl || '',
       updatedAt: Math.max(nativeSession.updatedAt || 0, hapi.updatedAt || 0),
       source: 'codex+hapi',
     };

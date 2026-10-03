@@ -13,6 +13,7 @@ It is designed for phone/remote terminal use where a simple numbered menu is mor
 - Groups HAPI/Codex sessions by base project.
 - Shows session title, last update time, worktree and branch information.
 - Resumes a saved Codex session.
+- Detects when a HAPI-managed process still owns a Codex session and offers a verified per-session takeover action.
 - Archives a saved Codex session through the official Codex CLI.
 - Starts a new Codex session in the main project directory.
 - Creates a Git worktree + branch and starts Codex there.
@@ -73,10 +74,13 @@ Inside a project:
 2. Session title B  [main]            2026-10-01 18:15
 
 [N] New Codex session in this project
+
 [W] New worktree + branch + Codex session
 [B] Back
 [Q] Quit
 ```
+
+When a selected session is still open in HAPI, its detail menu shows the HAPI PID and a `[T] Take over from HAPI and resume` action. `codex-nav` re-checks that the PID is actually a `hapi.exe codex` process before terminating only that session process tree. It first requests a normal tree termination so HAPI can clean up its runtime owner state, and only falls back to a forced termination if needed.
 
 ## HAPI integration
 
