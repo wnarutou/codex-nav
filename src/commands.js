@@ -5,8 +5,6 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
-const CODEX_COMMAND = process.platform === 'win32' ? 'codex.cmd' : 'codex';
-
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
@@ -19,8 +17,58 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function whereFirst(command) {
+  if (process.platform !== 'win32') return '';
+  const result = spawnSync('where.exe', [command], {
+    stdio: 'pipe',
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (result.error || result.status !== 0) return '';
+  return String(result.stdout || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean) || '';
+}
+
+function resolveCodexInvocation() {
+  if (process.platform !== 'win32') {
+    return { command: 'codex', argsPrefix: [] };
+  }
+
+  const nativeExe = whereFirst('codex.exe');
+  if (nativeExe) {
+    return { command: nativeExe, argsPrefix: [] };
+  }
+
+  const npmShim = whereFirst('codex.cmd');
+  if (npmShim) {
+    const npmEntry = path.join(
+      path.dirname(npmShim),
+      'node_modules',
+      '@openai',
+      'codex',
+      'bin',
+      'codex.js'
+    );
+    if (fs.existsSync(npmEntry)) {
+      return { command: process.execPath, argsPrefix: [npmEntry] };
+    }
+  }
+
+  return {
+    command: process.env.ComSpec || 'cmd.exe',
+    argsPrefix: ['/d', '/s', '/c', 'codex.cmd'],
+  };
+}
+
+function runCodexProcess(args, cwd, stdio = 'inherit') {
+  const invocation = resolveCodexInvocation();
+  return run(invocation.command, [...invocation.argsPrefix, ...args], { cwd, stdio });
+}
+
 function runCodex(args, cwd) {
-  const result = run(CODEX_COMMAND, args, { cwd, stdio: 'inherit' });
+  const result = runCodexProcess(args, cwd, 'inherit');
   if (result.status !== 0 && result.status !== null) {
     throw new Error(`Codex exited with status ${result.status}`);
   }
@@ -37,10 +85,11 @@ function resumeSession(session) {
 }
 
 function archiveSession(session) {
-  const result = run(CODEX_COMMAND, ['archive', session.codexSessionId], {
-    cwd: sessionCwd(session),
-    stdio: 'inherit',
-  });
+  const result = runCodexProcess(
+    ['archive', session.codexSessionId],
+    sessionCwd(session),
+    'inherit'
+  );
   if (result.status !== 0) throw new Error(`codex archive exited with status ${result.status}`);
 }
 
@@ -116,6 +165,8 @@ function createWorkspaceDirectory(root, name, initializeGit = true) {
 }
 
 module.exports = {
+  resolveCodexInvocation,
+  runCodexProcess,
   runCodex,
   resumeSession,
   archiveSession,
