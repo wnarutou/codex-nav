@@ -11,6 +11,9 @@ const {
   parseSessionRow,
   groupSessionsByProject,
   normalizePath,
+  listProjects,
+  groupOtherSessions,
+  findProjectForSession,
 } = require('../src/core');
 const { meaningfulUserText, mergeSessions } = require('../src/sessions');
 const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory } = require('../src/commands');
@@ -183,6 +186,73 @@ test('HAPI-only rows do not resurrect archived Codex sessions', () => {
   }]);
 
   assert.deepEqual(merged, []);
+});
+
+test('workspace project list only contains real directories under configured roots', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nav-root-'));
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nav-outside-'));
+  try {
+    fs.mkdirSync(path.join(root, 'real-project'));
+    fs.mkdirSync(path.join(root, 'real-project-worktrees'));
+    fs.mkdirSync(path.join(outside, 'bang'));
+
+    const projects = listProjects([root], [{
+      baseProjectPath: path.join(outside, 'bang'),
+      updatedAt: 10,
+    }]);
+
+    assert.deepEqual(projects.map((project) => project.name), ['real-project']);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('Codex sessions outside workspace projects are grouped separately', () => {
+  const projects = [
+    { name: 'joinquant', path: 'C:\\projects\\joinquant' },
+  ];
+  const sessions = [
+    {
+      title: 'workspace',
+      baseProjectPath: 'C:\\projects\\joinquant',
+      updatedAt: 200,
+    },
+    {
+      title: 'old bang',
+      baseProjectPath: 'C:\\Users\\me\\Documents\\Codex\\2026-08-23\\bang',
+      updatedAt: 300,
+    },
+    {
+      title: 'older bang',
+      baseProjectPath: 'C:\\Users\\me\\Documents\\Codex\\2026-08-23\\bang',
+      updatedAt: 100,
+    },
+  ];
+
+  const groups = groupOtherSessions(sessions, projects);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].name, 'bang');
+  assert.equal(groups[0].sessions.length, 2);
+  assert.equal(groups[0].sessions[0].title, 'old bang');
+});
+
+test('sessions nested inside a workspace project stay attached to that project', () => {
+  const projects = [
+    { name: 'gitrieve', path: 'C:\\projects\\gitrieve' },
+  ];
+  const nestedSession = {
+    title: 'nested worktree',
+    baseProjectPath: 'C:\\projects\\gitrieve\\.claude\\worktrees\\abc123',
+    updatedAt: 400,
+  };
+
+  const project = findProjectForSession(nestedSession, projects);
+  assert.equal(project.name, 'gitrieve');
+
+  const grouped = groupSessionsByProject([nestedSession], projects);
+  assert.equal(grouped.get(normalizePath(projects[0].path)).length, 1);
+  assert.equal(groupOtherSessions([nestedSession], projects).length, 0);
 });
 
 test('existing workspace directory is detected instead of treated as a fatal create error', () => {

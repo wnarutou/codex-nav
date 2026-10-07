@@ -7,6 +7,7 @@ const {
   discoverWorkspaceRoots,
   groupSessionsByProject,
   listProjects,
+  groupOtherSessions,
   normalizePath,
   formatDate,
 } = require('./core');
@@ -24,6 +25,8 @@ const {
   getHapiOwnership,
   takeOverHapiSession,
 } = require('./commands');
+
+const PAGE_SIZE = 20;
 
 function clear() {
   if (stdout.isTTY) stdout.write('\x1Bc');
@@ -46,9 +49,13 @@ async function choose(rl, prompt, max) {
   return { type: 'text', value };
 }
 
+function sessionSourceLabel(session) {
+  return session && session.source === 'codex+hapi' ? 'Codex · HAPI' : 'Codex';
+}
+
 function sessionLabel(session) {
   const place = session.branch || session.worktreeName || path.basename(session.path || session.baseProjectPath);
-  return `${session.title}  [${place}]  ${formatDate(session.updatedAt)}`;
+  return `${session.title}  [${sessionSourceLabel(session)}]  [${place}]  ${formatDate(session.updatedAt)}`;
 }
 
 async function sessionMenu(rl, session) {
@@ -58,6 +65,7 @@ async function sessionMenu(rl, session) {
     console.log(`Codex session: ${session.codexSessionId}`);
     console.log(`Path: ${session.path || session.baseProjectPath}`);
     if (session.branch) console.log(`Branch: ${session.branch}`);
+    console.log(`Source: ${sessionSourceLabel(session)}`);
     const ownership = getHapiOwnership(session);
     if (ownership.owned) console.log(`HAPI owner: PID ${ownership.pid} (running)`);
     console.log('');
@@ -111,6 +119,118 @@ async function sessionMenu(rl, session) {
   }
 }
 
+async function sessionListMenu(rl, title, sessions, options = {}) {
+  if (!sessions.length) {
+    clear();
+    heading(title);
+    console.log('(no Codex sessions found)');
+    await rl.question('Press Enter to continue...');
+    return;
+  }
+
+  let page = 0;
+  const pageCount = Math.max(1, Math.ceil(sessions.length / PAGE_SIZE));
+
+  while (true) {
+    if (page >= pageCount) page = pageCount - 1;
+    clear();
+    heading(`${title} (${sessions.length})`);
+
+    const start = page * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, sessions.length);
+    for (let index = start; index < end; index += 1) {
+      const session = sessions[index];
+      console.log(`${index + 1}. ${sessionLabel(session)}`);
+      if (options.showPath) {
+        console.log(`   ${session.path || session.baseProjectPath || '-'}`);
+      }
+    }
+
+    console.log('');
+    console.log(`Page ${page + 1}/${pageCount}`);
+    if (page + 1 < pageCount) console.log('[>] Next page');
+    if (page > 0) console.log('[<] Previous page');
+    console.log('[B] Back');
+    console.log('[Q] Quit');
+
+    const value = (await rl.question('> ')).trim();
+    if (/^q$/i.test(value)) return 'quit';
+    if (/^b$/i.test(value)) return;
+    if ((value === '>' || /^n$/i.test(value)) && page + 1 < pageCount) {
+      page += 1;
+      continue;
+    }
+    if ((value === '<' || /^p$/i.test(value)) && page > 0) {
+      page -= 1;
+      continue;
+    }
+
+    const number = Number(value);
+    if (Number.isInteger(number) && number >= 1 && number <= sessions.length) {
+      await sessionMenu(rl, sessions[number - 1]);
+    }
+  }
+}
+
+async function otherCodexMenu(rl, sessions, projects) {
+  const groups = groupOtherSessions(sessions, projects);
+  if (!groups.length) {
+    clear();
+    heading('Other Codex sessions');
+    console.log('(no Codex sessions outside workspace projects)');
+    await rl.question('Press Enter to continue...');
+    return;
+  }
+
+  let page = 0;
+  const pageCount = Math.max(1, Math.ceil(groups.length / PAGE_SIZE));
+
+  while (true) {
+    if (page >= pageCount) page = pageCount - 1;
+    clear();
+    heading(`Other Codex workspaces (${groups.length})`);
+
+    const start = page * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, groups.length);
+    for (let index = start; index < end; index += 1) {
+      const group = groups[index];
+      console.log(`${index + 1}. ${group.name}  (${group.sessions.length} sessions)`);
+      console.log(`   ${group.path}`);
+    }
+
+    console.log('');
+    console.log(`Page ${page + 1}/${pageCount}`);
+    if (page + 1 < pageCount) console.log('[>] Next page');
+    if (page > 0) console.log('[<] Previous page');
+    console.log('[B] Back');
+    console.log('[Q] Quit');
+
+    const value = (await rl.question('> ')).trim();
+    if (/^q$/i.test(value)) return 'quit';
+    if (/^b$/i.test(value)) return;
+    if ((value === '>' || /^n$/i.test(value)) && page + 1 < pageCount) {
+      page += 1;
+      continue;
+    }
+    if ((value === '<' || /^p$/i.test(value)) && page > 0) {
+      page -= 1;
+      continue;
+    }
+
+    const number = Number(value);
+    if (Number.isInteger(number) && number >= 1 && number <= groups.length) {
+      const group = groups[number - 1];
+      const result = await sessionListMenu(
+        rl,
+        group.name,
+        group.sessions,
+        { showPath: true }
+      );
+      if (result === 'quit') return 'quit';
+    }
+  }
+}
+
 async function projectMenu(rl, project, sessions) {
   while (true) {
     clear();
@@ -124,7 +244,7 @@ async function projectMenu(rl, project, sessions) {
     sessions.forEach((session, index) => {
       console.log(`${index + 1}. ${sessionLabel(session)}`);
     });
-    if (!sessions.length) console.log('(no HAPI/Codex sessions found)');
+    if (!sessions.length) console.log('(no Codex sessions found)');
 
     console.log('');
     console.log('[N] New Codex session in this project');
@@ -171,8 +291,10 @@ async function runApp() {
     while (true) {
       const roots = discoverWorkspaceRoots();
       const sessions = loadSessions();
-      const groups = groupSessionsByProject(sessions);
-      const projects = listProjects(roots, sessions);
+      const projects = listProjects(roots);
+      const groups = groupSessionsByProject(sessions, projects);
+      const otherGroups = groupOtherSessions(sessions, projects);
+      const otherSessionCount = otherGroups.reduce((sum, group) => sum + group.sessions.length, 0);
 
       clear();
       heading('codex-nav');
@@ -187,6 +309,8 @@ async function runApp() {
       if (!projects.length) console.log('(no projects found)');
 
       console.log('');
+      console.log(`[C] Other Codex sessions (${otherSessionCount})`);
+      console.log(`[A] All Codex sessions (${sessions.length})`);
       console.log('[N] New workspace directory');
       console.log('[Q] Quit');
 
@@ -198,6 +322,23 @@ async function runApp() {
           rl,
           project,
           groups.get(normalizePath(project.path)) || []
+        );
+        if (result === 'quit') return;
+        continue;
+      }
+
+      if (choice.type === 'text' && choice.value.toLowerCase() === 'c') {
+        const result = await otherCodexMenu(rl, sessions, projects);
+        if (result === 'quit') return;
+        continue;
+      }
+
+      if (choice.type === 'text' && choice.value.toLowerCase() === 'a') {
+        const result = await sessionListMenu(
+          rl,
+          'All Codex sessions',
+          sessions,
+          { showPath: true }
         );
         if (result === 'quit') return;
         continue;

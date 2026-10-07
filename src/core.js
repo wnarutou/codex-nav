@@ -84,11 +84,31 @@ function parseSessionRow(row) {
   };
 }
 
-function groupSessionsByProject(sessions) {
+function findProjectForSession(session, projects) {
+  if (!session || !session.baseProjectPath) return null;
+  const sessionKey = normalizePath(session.baseProjectPath);
+  let best = null;
+  let bestLength = -1;
+
+  for (const project of projects || []) {
+    if (!project || !project.path) continue;
+    const projectKey = normalizePath(project.path);
+    const nested = sessionKey === projectKey || sessionKey.startsWith(`${projectKey}${path.sep}`);
+    if (nested && projectKey.length > bestLength) {
+      best = project;
+      bestLength = projectKey.length;
+    }
+  }
+
+  return best;
+}
+
+function groupSessionsByProject(sessions, projects = []) {
   const groups = new Map();
   for (const session of sessions) {
     if (!session || !session.baseProjectPath) continue;
-    const key = normalizePath(session.baseProjectPath);
+    const project = findProjectForSession(session, projects);
+    const key = project ? normalizePath(project.path) : normalizePath(session.baseProjectPath);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(session);
   }
@@ -98,7 +118,7 @@ function groupSessionsByProject(sessions) {
   return groups;
 }
 
-function listProjects(roots, sessions) {
+function listProjects(roots) {
   const byKey = new Map();
 
   for (const root of roots) {
@@ -119,18 +139,36 @@ function listProjects(roots, sessions) {
     }
   }
 
+  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function groupOtherSessions(sessions, projects) {
+  const byPath = new Map();
+
   for (const session of sessions) {
-    if (!session.baseProjectPath) continue;
+    if (!session || !session.baseProjectPath) continue;
+    if (findProjectForSession(session, projects)) continue;
     const key = normalizePath(session.baseProjectPath);
-    if (!byKey.has(key) && fs.existsSync(session.baseProjectPath)) {
-      byKey.set(key, {
-        name: path.basename(session.baseProjectPath),
+
+    if (!byPath.has(key)) {
+      byPath.set(key, {
+        name: path.basename(session.baseProjectPath) || session.baseProjectPath,
         path: session.baseProjectPath,
+        sessions: [],
+        updatedAt: 0,
       });
     }
+
+    const group = byPath.get(key);
+    group.sessions.push(session);
+    group.updatedAt = Math.max(group.updatedAt, session.updatedAt || 0);
   }
 
-  return [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name));
+  for (const group of byPath.values()) {
+    group.sessions.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  return [...byPath.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function formatDate(timestamp) {
@@ -147,7 +185,9 @@ module.exports = {
   discoverWorkspaceRoots,
   inferBaseProjectPath,
   parseSessionRow,
+  findProjectForSession,
   groupSessionsByProject,
   listProjects,
+  groupOtherSessions,
   formatDate,
 };

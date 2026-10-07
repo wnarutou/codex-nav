@@ -7,10 +7,12 @@ It is designed for phone/remote terminal use where a simple numbered menu is mor
 ## Features
 
 - Discovers HAPI workspace roots from `~/.hapi/runner.state.json`.
-- Lists projects under the configured workspace root.
+- Lists only real project directories under the configured workspace root; historical Codex working directories no longer appear as workspace projects.
 - Reads active sessions from Codex's native `~/.codex/sessions` store; archived sessions stay out of the active menu.
 - Reads `~/.hapi/hapi.db` in **read-only** mode to enrich titles/worktree metadata.
 - Groups HAPI/Codex sessions by base project.
+- Shows non-workspace Codex history under `Other Codex sessions` and provides an `All Codex sessions` view.
+- Marks sessions as `[Codex]` or `[Codex · HAPI]` depending on whether HAPI metadata is attached.
 - Shows session title, last update time, worktree and branch information.
 - Resumes a saved Codex session.
 - Detects when a HAPI-managed process still owns a Codex session and offers a verified per-session takeover action.
@@ -62,6 +64,8 @@ codex-nav
 2. gitrieve   (5 sessions)
 3. testb      (3 sessions)
 
+[C] Other Codex sessions (8)
+[A] All Codex sessions (404)
 [N] New workspace directory
 [Q] Quit
 > 1
@@ -70,8 +74,8 @@ codex-nav
 Inside a project:
 
 ```text
-1. Session title A  [hapi-1002-abcd]  2026-10-02 22:30
-2. Session title B  [main]            2026-10-01 18:15
+1. Session title A  [Codex · HAPI]  [hapi-1002-abcd]  2026-10-02 22:30
+2. Session title B  [Codex]         [main]            2026-10-01 18:15
 
 [N] New Codex session in this project
 
@@ -81,6 +85,8 @@ Inside a project:
 ```
 
 When a selected session is still open in HAPI, its detail menu shows the HAPI PID and a `[T] Take over from HAPI and resume` action. `codex-nav` re-checks that the PID is actually a `hapi.exe codex` process before terminating only that session process tree. It first requests a normal tree termination so HAPI can clean up its runtime owner state, and only falls back to a forced termination if needed.
+
+`[C] Other Codex sessions` groups active Codex sessions whose working directory is outside the configured workspace roots (for example old `Documents\\Codex\\...` directories). `[A] All Codex sessions` shows every active native Codex session, newest first. Both views are paginated for mobile terminals.
 
 ## HAPI integration
 
