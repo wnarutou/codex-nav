@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
 const {
   getWorkspaceRootsFromRunnerState,
   inferBaseProjectPath,
@@ -11,7 +13,7 @@ const {
   normalizePath,
 } = require('../src/core');
 const { meaningfulUserText, mergeSessions } = require('../src/sessions');
-const { isExpectedHapiCodexProcess } = require('../src/commands');
+const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory } = require('../src/commands');
 
 test('extracts repeated workspace roots from HAPI runner argv', () => {
   const state = {
@@ -181,4 +183,31 @@ test('HAPI-only rows do not resurrect archived Codex sessions', () => {
   }]);
 
   assert.deepEqual(merged, []);
+});
+
+test('existing workspace directory is detected instead of treated as a fatal create error', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nav-'));
+  try {
+    const existing = path.join(root, 'existing-project');
+    fs.mkdirSync(existing);
+
+    const info = inspectWorkspaceDirectory(root, 'existing-project');
+    assert.equal(info.path, existing);
+    assert.equal(info.exists, true);
+    assert.equal(info.isDirectory, true);
+    assert.equal(info.isGitRepository, false);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('new workspace directory can still be created normally', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nav-'));
+  try {
+    const target = createWorkspaceDirectory(root, 'new-project', false);
+    assert.equal(target, path.join(root, 'new-project'));
+    assert.equal(fs.statSync(target).isDirectory(), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

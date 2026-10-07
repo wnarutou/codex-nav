@@ -19,6 +19,8 @@ const {
   isDirty,
   createWorktree,
   createWorkspaceDirectory,
+  inspectWorkspaceDirectory,
+  initializeGitRepository,
   getHapiOwnership,
   takeOverHapiSession,
 } = require('./commands');
@@ -205,10 +207,53 @@ async function runApp() {
         const root = roots[0];
         const name = (await rl.question(`New directory under ${root}: `)).trim();
         if (!name) continue;
-        const initGit = (await rl.question('Initialize Git repository? [Y/n] ')).trim().toLowerCase();
-        const target = createWorkspaceDirectory(root, name, initGit !== 'n' && initGit !== 'no');
-        console.log(`Created: ${target}`);
-        await rl.question('Press Enter to continue...');
+
+        try {
+          const existing = inspectWorkspaceDirectory(root, name);
+          if (existing.exists) {
+            if (!existing.isDirectory) {
+              console.log(`Cannot use workspace: ${existing.path} exists but is not a directory.`);
+              await rl.question('Press Enter to continue...');
+              continue;
+            }
+
+            console.log(`Directory already exists: ${existing.path}`);
+            if (existing.isGitRepository) console.log('Existing Git repository detected.');
+
+            const useExisting = (await rl.question(
+              'Use this existing directory as a workspace? [Y/n] '
+            )).trim().toLowerCase();
+            if (useExisting === 'n' || useExisting === 'no') continue;
+
+            if (!existing.isGitRepository) {
+              const initGit = (await rl.question(
+                'Initialize Git repository in the existing directory? [Y/n] '
+              )).trim().toLowerCase();
+              if (initGit !== 'n' && initGit !== 'no') {
+                initializeGitRepository(existing.path);
+                console.log('Git repository initialized.');
+              }
+            }
+
+            console.log(`Using existing workspace: ${existing.path}`);
+            await rl.question('Press Enter to continue...');
+            continue;
+          }
+
+          const initGit = (await rl.question(
+            'Initialize Git repository? [Y/n] '
+          )).trim().toLowerCase();
+          const target = createWorkspaceDirectory(
+            root,
+            name,
+            initGit !== 'n' && initGit !== 'no'
+          );
+          console.log(`Created: ${target}`);
+          await rl.question('Press Enter to continue...');
+        } catch (error) {
+          console.log(`Workspace error: ${error && error.message ? error.message : error}`);
+          await rl.question('Press Enter to continue...');
+        }
       }
     }
   } finally {

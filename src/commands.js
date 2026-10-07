@@ -252,20 +252,52 @@ function createWorktree(projectPath) {
   return { branch, worktreePath, shortName };
 }
 
-function createWorkspaceDirectory(root, name, initializeGit = true) {
+function workspaceTarget(root, name) {
   const safe = String(name || '').trim();
   if (!safe || safe === '.' || safe === '..' || /[<>:"/\\|?*]/.test(safe)) {
     throw new Error('Invalid workspace directory name.');
   }
+  return path.join(root, safe);
+}
 
-  const target = path.join(root, safe);
+function inspectWorkspaceDirectory(root, name) {
+  const target = workspaceTarget(root, name);
+  if (!fs.existsSync(target)) {
+    return { path: target, exists: false, isDirectory: false, isGitRepository: false };
+  }
+
+  let stat;
+  try {
+    stat = fs.statSync(target);
+  } catch (_) {
+    return { path: target, exists: true, isDirectory: false, isGitRepository: false };
+  }
+
+  const isDirectory = stat.isDirectory();
+  return {
+    path: target,
+    exists: true,
+    isDirectory,
+    isGitRepository: isDirectory && isGitRepository(target),
+  };
+}
+
+function initializeGitRepository(target) {
+  if (isGitRepository(target)) return false;
+  const result = run('git', ['init'], { cwd: target, stdio: 'pipe' });
+  if (result.status !== 0) {
+    const detail = String(result.stderr || result.stdout || '').trim();
+    throw new Error(detail || 'git init failed for the workspace.');
+  }
+  return true;
+}
+
+function createWorkspaceDirectory(root, name, initializeGit = true) {
+  const target = workspaceTarget(root, name);
   if (fs.existsSync(target)) throw new Error('Directory already exists.');
 
   fs.mkdirSync(target, { recursive: false });
-  if (initializeGit) {
-    const result = run('git', ['init'], { cwd: target, stdio: 'pipe' });
-    if (result.status !== 0) throw new Error('git init failed for the new workspace.');
-  }
+  if (initializeGit) initializeGitRepository(target);
   return target;
 }
 
@@ -285,5 +317,7 @@ module.exports = {
   getBranch,
   isDirty,
   createWorktree,
+  inspectWorkspaceDirectory,
+  initializeGitRepository,
   createWorkspaceDirectory,
 };
