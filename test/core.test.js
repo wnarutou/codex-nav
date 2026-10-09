@@ -15,7 +15,7 @@ const {
   groupOtherSessions,
   findProjectForSession,
 } = require('../src/core');
-const { meaningfulUserText, mergeSessions } = require('../src/sessions');
+const { meaningfulUserText, mergeSessions, parseCodexSessionFile } = require('../src/sessions');
 const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory } = require('../src/commands');
 
 test('extracts repeated workspace roots from HAPI runner argv', () => {
@@ -186,6 +186,57 @@ test('HAPI-only rows do not resurrect archived Codex sessions', () => {
   }]);
 
   assert.deepEqual(merged, []);
+});
+
+test('archived Codex session files are marked archived', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-nav-archive-'));
+  try {
+    const filePath = path.join(root, 'rollout-test.jsonl');
+    const records = [
+      {
+        timestamp: '2026-10-01T00:00:00Z',
+        type: 'session_meta',
+        payload: {
+          id: 'archived-1',
+          cwd: 'C:\\projects\\demo',
+          git: { branch: 'main' },
+        },
+      },
+      {
+        timestamp: '2026-10-01T00:00:01Z',
+        type: 'response_item',
+        payload: {
+          type: 'message',
+          role: 'user',
+          content: [{ type: 'input_text', text: 'Archived session title' }],
+        },
+      },
+    ];
+    fs.writeFileSync(filePath, records.map((record) => JSON.stringify(record)).join('\n'));
+
+    const session = parseCodexSessionFile(filePath, { archived: true });
+    assert.equal(session.codexSessionId, 'archived-1');
+    assert.equal(session.archived, true);
+    assert.equal(session.title, 'Archived session title');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('active and archived sessions are mixed strictly by update time descending', () => {
+  const sessions = [
+    { title: 'older active', baseProjectPath: 'C:\\projects\\demo', updatedAt: 100, archived: false },
+    { title: 'new archived', baseProjectPath: 'C:\\projects\\demo', updatedAt: 300, archived: true },
+    { title: 'middle active', baseProjectPath: 'C:\\projects\\demo', updatedAt: 200, archived: false },
+  ];
+
+  const grouped = groupSessionsByProject(sessions);
+  const items = grouped.get(normalizePath('C:\\projects\\demo'));
+  assert.deepEqual(items.map((item) => item.title), [
+    'new archived',
+    'middle active',
+    'older active',
+  ]);
 });
 
 test('workspace project list only contains real directories under configured roots', () => {

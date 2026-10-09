@@ -58,7 +58,7 @@ function meaningfulUserText(payload) {
   return '';
 }
 
-function parseCodexSessionFile(filePath) {
+function parseCodexSessionFile(filePath, options = {}) {
   let text;
   try {
     text = readPrefix(filePath);
@@ -111,14 +111,30 @@ function parseCodexSessionFile(filePath) {
     updatedAt,
     active: true,
     source: 'codex',
+    archived: Boolean(options.archived),
   };
 }
 
 function loadCodexSessions() {
-  const root = path.join(os.homedir(), '.codex', 'sessions');
-  return walkJsonlFiles(root)
-    .map(parseCodexSessionFile)
+  const activeRoot = path.join(os.homedir(), '.codex', 'sessions');
+  const archivedRoot = path.join(os.homedir(), '.codex', 'archived_sessions');
+
+  const active = walkJsonlFiles(activeRoot)
+    .map((filePath) => parseCodexSessionFile(filePath, { archived: false }))
     .filter(Boolean);
+  const archived = walkJsonlFiles(archivedRoot)
+    .map((filePath) => parseCodexSessionFile(filePath, { archived: true }))
+    .filter(Boolean);
+
+  const byId = new Map();
+  for (const session of [...archived, ...active]) {
+    const previous = byId.get(session.codexSessionId);
+    if (!previous || previous.archived || !session.archived) {
+      byId.set(session.codexSessionId, session);
+    }
+  }
+
+  return [...byId.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function mergeSessions(codexSessions, hapiSessions) {
@@ -146,6 +162,7 @@ function mergeSessions(codexSessions, hapiSessions) {
       hapiMcpUrl: hapi.hapiMcpUrl || '',
       updatedAt: Math.max(nativeSession.updatedAt || 0, hapi.updatedAt || 0),
       source: 'codex+hapi',
+      archived: Boolean(nativeSession.archived),
     };
   });
 

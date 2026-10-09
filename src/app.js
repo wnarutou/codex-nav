@@ -15,6 +15,7 @@ const { loadSessions } = require('./sessions');
 const {
   resumeSession,
   archiveSession,
+  unarchiveSession,
   startSession,
   getBranch,
   isDirty,
@@ -55,7 +56,8 @@ function sessionSourceLabel(session) {
 
 function sessionLabel(session) {
   const place = session.branch || session.worktreeName || path.basename(session.path || session.baseProjectPath);
-  return `${session.title}  [${sessionSourceLabel(session)}]  [${place}]  ${formatDate(session.updatedAt)}`;
+  const archived = session.archived ? '[已归档] ' : '';
+  return `${archived}${session.title}  [${sessionSourceLabel(session)}]  [${place}]  ${formatDate(session.updatedAt)}`;
 }
 
 async function sessionMenu(rl, session) {
@@ -66,12 +68,14 @@ async function sessionMenu(rl, session) {
     console.log(`Path: ${session.path || session.baseProjectPath}`);
     if (session.branch) console.log(`Branch: ${session.branch}`);
     console.log(`Source: ${sessionSourceLabel(session)}`);
+    console.log(`Status: ${session.archived ? '已归档' : '活动'}`);
     const ownership = getHapiOwnership(session);
     if (ownership.owned) console.log(`HAPI owner: PID ${ownership.pid} (running)`);
     console.log('');
-    console.log('[R] Resume');
-    if (ownership.owned) console.log('[T] Take over from HAPI and resume');
-    console.log('[A] Archive');
+    if (!session.archived) console.log('[R] Resume');
+    if (!session.archived && ownership.owned) console.log('[T] Take over from HAPI and resume');
+    if (session.archived) console.log('[U] Unarchive');
+    else console.log('[A] Archive');
     console.log('[B] Back');
 
     const action = (await rl.question('> ')).trim().toLowerCase();
@@ -107,13 +111,22 @@ async function sessionMenu(rl, session) {
         continue;
       }
     }
+    if (action === 'u' && session.archived) {
+      const confirm = (await rl.question('Unarchive this session? [y/N] ')).trim().toLowerCase();
+      if (confirm === 'y' || confirm === 'yes') {
+        unarchiveSession(session);
+        console.log('Unarchived.');
+        await rl.question('Press Enter to continue...');
+        return 'refresh';
+      }
+    }
     if (action === 'a') {
       const confirm = (await rl.question('Archive this session? [y/N] ')).trim().toLowerCase();
       if (confirm === 'y' || confirm === 'yes') {
         archiveSession(session);
         console.log('Archived.');
         await rl.question('Press Enter to continue...');
-        return;
+        return 'refresh';
       }
     }
   }
@@ -167,7 +180,8 @@ async function sessionListMenu(rl, title, sessions, options = {}) {
 
     const number = Number(value);
     if (Number.isInteger(number) && number >= 1 && number <= sessions.length) {
-      await sessionMenu(rl, sessions[number - 1]);
+      const result = await sessionMenu(rl, sessions[number - 1]);
+      if (result === 'refresh') return 'refresh';
     }
   }
 }
@@ -227,40 +241,62 @@ async function otherCodexMenu(rl, sessions, projects) {
         { showPath: true }
       );
       if (result === 'quit') return 'quit';
+      if (result === 'refresh') return 'refresh';
     }
   }
 }
 
 async function projectMenu(rl, project, sessions) {
+  const sortedSessions = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt);
+  let page = 0;
+  const pageCount = Math.max(1, Math.ceil(sortedSessions.length / PAGE_SIZE));
+
   while (true) {
+    if (page >= pageCount) page = pageCount - 1;
     clear();
-    heading(project.name);
+    heading(`${project.name} (${sortedSessions.length})`);
     console.log(`Path: ${project.path}`);
     const branch = getBranch(project.path);
     if (branch) console.log(`Branch: ${branch}`);
     if (isDirty(project.path)) console.log('Warning: working tree has uncommitted changes.');
     console.log('');
 
-    sessions.forEach((session, index) => {
-      console.log(`${index + 1}. ${sessionLabel(session)}`);
-    });
-    if (!sessions.length) console.log('(no Codex sessions found)');
+    const start = page * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, sortedSessions.length);
+    for (let index = start; index < end; index += 1) {
+      console.log(`${index + 1}. ${sessionLabel(sortedSessions[index])}`);
+    }
+    if (!sortedSessions.length) console.log('(no Codex sessions found)');
 
     console.log('');
+    console.log(`Page ${page + 1}/${pageCount}`);
+    if (page + 1 < pageCount) console.log('[>] Next page');
+    if (page > 0) console.log('[<] Previous page');
     console.log('[N] New Codex session in this project');
     console.log('[W] New worktree + branch + Codex session');
     console.log('[B] Back');
     console.log('[Q] Quit');
 
-    const choice = await choose(rl, '> ', sessions.length);
-    if (choice.type === 'quit') return 'quit';
-    if (choice.type === 'back') return;
-    if (choice.type === 'index') {
-      await sessionMenu(rl, sessions[choice.index]);
+    const value = (await rl.question('> ')).trim();
+    if (/^q$/i.test(value)) return 'quit';
+    if (/^b$/i.test(value)) return;
+    if ((value === '>' || /^next$/i.test(value)) && page + 1 < pageCount) {
+      page += 1;
+      continue;
+    }
+    if ((value === '<' || /^prev$/i.test(value)) && page > 0) {
+      page -= 1;
       continue;
     }
 
-    const action = choice.value.toLowerCase();
+    const number = Number(value);
+    if (Number.isInteger(number) && number >= 1 && number <= sortedSessions.length) {
+      const result = await sessionMenu(rl, sortedSessions[number - 1]);
+      if (result === 'refresh') return 'refresh';
+      continue;
+    }
+
+    const action = value.toLowerCase();
     if (action === 'n') {
       if (isDirty(project.path)) {
         const answer = (await rl.question('Working tree is dirty. Continue in this project? [y/N] ')).trim().toLowerCase();

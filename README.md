@@ -8,12 +8,14 @@ It is designed for phone/remote terminal use where a simple numbered menu is mor
 
 - Discovers HAPI workspace roots from `~/.hapi/runner.state.json`.
 - Lists only real project directories under the configured workspace root; historical Codex working directories no longer appear as workspace projects.
-- Reads active sessions from Codex's native `~/.codex/sessions` store; archived sessions stay out of the active menu.
+- Reads both active sessions from `~/.codex/sessions` and archived sessions from `~/.codex/archived_sessions`.
 - Reads `~/.hapi/hapi.db` in **read-only** mode to enrich titles/worktree metadata.
 - Groups HAPI/Codex sessions by base project.
 - Shows non-workspace Codex history under `Other Codex sessions` and provides an `All Codex sessions` view.
 - Marks sessions as `[Codex]` or `[Codex · HAPI]` depending on whether HAPI metadata is attached.
 - Shows session title, last update time, worktree and branch information.
+- Sorts project sessions by last update time descending and prefixes archived entries with `[已归档]`.
+- Paginates long project session lists for mobile terminals.
 - Resumes a saved Codex session.
 - Detects when a HAPI-managed process still owns a Codex session and offers a verified per-session takeover action.
 - Archives a saved Codex session through the official Codex CLI.
@@ -74,11 +76,12 @@ codex-nav
 Inside a project:
 
 ```text
-1. Session title A  [Codex · HAPI]  [hapi-1002-abcd]  2026-10-02 22:30
-2. Session title B  [Codex]         [main]            2026-10-01 18:15
+1. Session title A              [Codex · HAPI]  [hapi-1002-abcd]  2026-10-02 22:30
+2. [已归档] Session title B      [Codex]         [main]            2026-10-01 18:15
 
+Page 1/3
+[>] Next page
 [N] New Codex session in this project
-
 [W] New worktree + branch + Codex session
 [B] Back
 [Q] Quit
@@ -86,11 +89,11 @@ Inside a project:
 
 When a selected session is still open in HAPI, its detail menu shows the HAPI PID and a `[T] Take over from HAPI and resume` action. `codex-nav` re-checks that the PID is actually a `hapi.exe codex` process before terminating only that session process tree. It first requests a normal tree termination so HAPI can clean up its runtime owner state, and only falls back to a forced termination if needed.
 
-`[C] Other Codex sessions` groups active Codex sessions whose working directory is outside the configured workspace roots (for example old `Documents\\Codex\\...` directories). `[A] All Codex sessions` shows every active native Codex session, newest first. Both views are paginated for mobile terminals.
+`[C] Other Codex sessions` groups Codex sessions whose working directory is outside the configured workspace roots (for example old `Documents\\Codex\\...` directories). `[A] All Codex sessions` shows active and archived native Codex sessions together, newest first. All long session views are paginated for mobile terminals.
 
 ## HAPI integration
 
-`codex-nav` treats Codex's own active session store as the source of truth and HAPI as a read-only metadata source. This means sessions created directly from `codex-nav` remain visible even if HAPI did not create them.
+`codex-nav` treats Codex's own active and archived session stores as the source of truth and HAPI as a read-only metadata source. This means sessions created directly from `codex-nav` remain visible even if HAPI did not create them.
 
 It reads:
 
@@ -104,6 +107,7 @@ Session actions are delegated to Codex itself:
 ```text
 codex resume <session-id>
 codex archive <session-id>
+codex unarchive <session-id>
 ```
 
 Worktree creation is delegated to Git.

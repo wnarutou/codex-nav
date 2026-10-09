@@ -198,6 +198,15 @@ function archiveSession(session) {
   if (result.status !== 0) throw new Error(`codex archive exited with status ${result.status}`);
 }
 
+function unarchiveSession(session) {
+  const result = runCodexProcess(
+    ['unarchive', session.codexSessionId],
+    sessionCwd(session),
+    'inherit'
+  );
+  if (result.status !== 0) throw new Error(`codex unarchive exited with status ${result.status}`);
+}
+
 function startSession(projectPath) {
   runCodex(['-C', projectPath, '--no-alt-screen'], projectPath);
 }
@@ -311,6 +320,7 @@ module.exports = {
   runCodex,
   resumeSession,
   archiveSession,
+  unarchiveSession,
   startSession,
   gitOutput,
   isGitRepository,
