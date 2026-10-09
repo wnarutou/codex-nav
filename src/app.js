@@ -29,6 +29,17 @@ const {
 
 const PAGE_SIZE = 20;
 
+function parsePageNumber(value, pageCount) {
+  const page = Number(String(value || '').trim());
+  if (!Number.isInteger(page) || page < 1 || page > pageCount) return null;
+  return page - 1;
+}
+
+async function promptPageNumber(rl, pageCount) {
+  const value = await rl.question(`Page number (1-${pageCount}): `);
+  return parsePageNumber(value, pageCount);
+}
+
 function clear() {
   if (stdout.isTTY) stdout.write('\x1Bc');
 }
@@ -163,6 +174,7 @@ async function sessionListMenu(rl, title, sessions, options = {}) {
     console.log(`Page ${page + 1}/${pageCount}`);
     if (page + 1 < pageCount) console.log('[>] Next page');
     if (page > 0) console.log('[<] Previous page');
+    if (pageCount > 1) console.log('[G] Go to page');
     console.log('[B] Back');
     console.log('[Q] Quit');
 
@@ -175,6 +187,16 @@ async function sessionListMenu(rl, title, sessions, options = {}) {
     }
     if ((value === '<' || /^p$/i.test(value)) && page > 0) {
       page -= 1;
+      continue;
+    }
+    if (/^g$/i.test(value) && pageCount > 1) {
+      const target = await promptPageNumber(rl, pageCount);
+      if (target === null) {
+        console.log(`Invalid page. Enter a number from 1 to ${pageCount}.`);
+        await rl.question('Press Enter to continue...');
+      } else {
+        page = target;
+      }
       continue;
     }
 
@@ -216,6 +238,7 @@ async function otherCodexMenu(rl, sessions, projects) {
     console.log(`Page ${page + 1}/${pageCount}`);
     if (page + 1 < pageCount) console.log('[>] Next page');
     if (page > 0) console.log('[<] Previous page');
+    if (pageCount > 1) console.log('[G] Go to page');
     console.log('[B] Back');
     console.log('[Q] Quit');
 
@@ -228,6 +251,16 @@ async function otherCodexMenu(rl, sessions, projects) {
     }
     if ((value === '<' || /^p$/i.test(value)) && page > 0) {
       page -= 1;
+      continue;
+    }
+    if (/^g$/i.test(value) && pageCount > 1) {
+      const target = await promptPageNumber(rl, pageCount);
+      if (target === null) {
+        console.log(`Invalid page. Enter a number from 1 to ${pageCount}.`);
+        await rl.question('Press Enter to continue...');
+      } else {
+        page = target;
+      }
       continue;
     }
 
@@ -272,6 +305,7 @@ async function projectMenu(rl, project, sessions) {
     console.log(`Page ${page + 1}/${pageCount}`);
     if (page + 1 < pageCount) console.log('[>] Next page');
     if (page > 0) console.log('[<] Previous page');
+    if (pageCount > 1) console.log('[G] Go to page');
     console.log('[N] New Codex session in this project');
     console.log('[W] New worktree + branch + Codex session');
     console.log('[B] Back');
@@ -286,6 +320,16 @@ async function projectMenu(rl, project, sessions) {
     }
     if ((value === '<' || /^prev$/i.test(value)) && page > 0) {
       page -= 1;
+      continue;
+    }
+    if (/^g$/i.test(value) && pageCount > 1) {
+      const target = await promptPageNumber(rl, pageCount);
+      if (target === null) {
+        console.log(`Invalid page. Enter a number from 1 to ${pageCount}.`);
+        await rl.question('Press Enter to continue...');
+      } else {
+        page = target;
+      }
       continue;
     }
 
@@ -439,5 +483,6 @@ async function runApp() {
 }
 
 module.exports = {
+  parsePageNumber,
   runApp,
 };

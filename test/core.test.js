@@ -17,6 +17,7 @@ const {
 } = require('../src/core');
 const { meaningfulUserText, mergeSessions, parseCodexSessionFile } = require('../src/sessions');
 const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory } = require('../src/commands');
+const { parsePageNumber } = require('../src/app');
 
 test('extracts repeated workspace roots from HAPI runner argv', () => {
   const state = {
@@ -304,6 +305,16 @@ test('sessions nested inside a workspace project stay attached to that project',
   const grouped = groupSessionsByProject([nestedSession], projects);
   assert.equal(grouped.get(normalizePath(projects[0].path)).length, 1);
   assert.equal(groupOtherSessions([nestedSession], projects).length, 0);
+});
+
+test('page number parser accepts valid pages and rejects invalid pages', () => {
+  assert.equal(parsePageNumber('1', 10), 0);
+  assert.equal(parsePageNumber('10', 10), 9);
+  assert.equal(parsePageNumber(' 5 ', 10), 4);
+  assert.equal(parsePageNumber('0', 10), null);
+  assert.equal(parsePageNumber('11', 10), null);
+  assert.equal(parsePageNumber('abc', 10), null);
+  assert.equal(parsePageNumber('2.5', 10), null);
 });
 
 test('existing workspace directory is detected instead of treated as a fatal create error', () => {

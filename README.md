@@ -81,6 +81,7 @@ Inside a project:
 
 Page 1/3
 [>] Next page
+[G] Go to page
 [N] New Codex session in this project
 [W] New worktree + branch + Codex session
 [B] Back
@@ -90,6 +91,8 @@ Page 1/3
 When a selected session is still open in HAPI, its detail menu shows the HAPI PID and a `[T] Take over from HAPI and resume` action. `codex-nav` re-checks that the PID is actually a `hapi.exe codex` process before terminating only that session process tree. It first requests a normal tree termination so HAPI can clean up its runtime owner state, and only falls back to a forced termination if needed.
 
 `[C] Other Codex sessions` groups Codex sessions whose working directory is outside the configured workspace roots (for example old `Documents\\Codex\\...` directories). `[A] All Codex sessions` shows active and archived native Codex sessions together, newest first. All long session views are paginated for mobile terminals.
+
+Paged lists support `[G] Go to page`; enter a page number from `1` to the displayed total to jump directly to that page.
 
 ## HAPI integration
 
