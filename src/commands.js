@@ -5,6 +5,13 @@ const path = require('path');
 const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 
+const FULL_ACCESS_ARGS = Object.freeze([
+  '--sandbox',
+  'danger-full-access',
+  '--ask-for-approval',
+  'never',
+]);
+
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: options.cwd,
@@ -184,9 +191,29 @@ function takeOverHapiSession(session) {
   );
 }
 
+function buildStartSessionArgs(projectPath) {
+  return [
+    ...FULL_ACCESS_ARGS,
+    '-C',
+    projectPath,
+    '--no-alt-screen',
+  ];
+}
+
+function buildResumeSessionArgs(sessionId, cwd) {
+  return [
+    'resume',
+    sessionId,
+    ...FULL_ACCESS_ARGS,
+    '-C',
+    cwd,
+    '--no-alt-screen',
+  ];
+}
+
 function resumeSession(session) {
   const cwd = sessionCwd(session);
-  runCodex(['resume', session.codexSessionId, '-C', cwd, '--no-alt-screen'], cwd);
+  runCodex(buildResumeSessionArgs(session.codexSessionId, cwd), cwd);
 }
 
 function archiveSession(session) {
@@ -208,7 +235,7 @@ function unarchiveSession(session) {
 }
 
 function startSession(projectPath) {
-  runCodex(['-C', projectPath, '--no-alt-screen'], projectPath);
+  runCodex(buildStartSessionArgs(projectPath), projectPath);
 }
 
 function gitOutput(args, cwd) {
@@ -311,6 +338,9 @@ function createWorkspaceDirectory(root, name, initializeGit = true) {
 }
 
 module.exports = {
+  FULL_ACCESS_ARGS,
+  buildStartSessionArgs,
+  buildResumeSessionArgs,
   resolveCodexInvocation,
   runCodexProcess,
   inspectWindowsProcess,

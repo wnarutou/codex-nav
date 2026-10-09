@@ -16,7 +16,7 @@ const {
   findProjectForSession,
 } = require('../src/core');
 const { meaningfulUserText, mergeSessions, parseCodexSessionFile } = require('../src/sessions');
-const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory } = require('../src/commands');
+const { isExpectedHapiCodexProcess, inspectWorkspaceDirectory, createWorkspaceDirectory, buildStartSessionArgs, buildResumeSessionArgs } = require('../src/commands');
 const { parsePageNumber } = require('../src/app');
 
 test('extracts repeated workspace roots from HAPI runner argv', () => {
@@ -305,6 +305,38 @@ test('sessions nested inside a workspace project stay attached to that project',
   const grouped = groupSessionsByProject([nestedSession], projects);
   assert.equal(grouped.get(normalizePath(projects[0].path)).length, 1);
   assert.equal(groupOtherSessions([nestedSession], projects).length, 0);
+});
+
+test('new Codex sessions default to full access without changing global config', () => {
+  assert.deepEqual(
+    buildStartSessionArgs('C:\\projects\\demo'),
+    [
+      '--sandbox',
+      'danger-full-access',
+      '--ask-for-approval',
+      'never',
+      '-C',
+      'C:\\projects\\demo',
+      '--no-alt-screen',
+    ]
+  );
+});
+
+test('resumed Codex sessions also default to full access', () => {
+  assert.deepEqual(
+    buildResumeSessionArgs('session-123', 'C:\\projects\\demo'),
+    [
+      'resume',
+      'session-123',
+      '--sandbox',
+      'danger-full-access',
+      '--ask-for-approval',
+      'never',
+      '-C',
+      'C:\\projects\\demo',
+      '--no-alt-screen',
+    ]
+  );
 });
 
 test('page number parser accepts valid pages and rejects invalid pages', () => {

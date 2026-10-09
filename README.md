@@ -23,6 +23,7 @@ It is designed for phone/remote terminal use where a simple numbered menu is mor
 - Creates a Git worktree + branch and starts Codex there.
 - Creates new workspace directories and can initialize Git.
 - Uses `--no-alt-screen` for Codex interactive sessions, which is friendlier to mobile terminals.
+- Starts and resumes Codex sessions from `codex-nav` with `--sandbox danger-full-access --ask-for-approval never`, without modifying the user's global Codex config.
 
 ## Requirements
 
@@ -93,6 +94,8 @@ When a selected session is still open in HAPI, its detail menu shows the HAPI PI
 `[C] Other Codex sessions` groups Codex sessions whose working directory is outside the configured workspace roots (for example old `Documents\\Codex\\...` directories). `[A] All Codex sessions` shows active and archived native Codex sessions together, newest first. All long session views are paginated for mobile terminals.
 
 Paged lists support `[G] Go to page`; enter a page number from `1` to the displayed total to jump directly to that page.
+
+Sessions launched, resumed, or taken over through `codex-nav` default to full access. This applies to `[N] New`, `[W] New worktree`, normal Resume, and Resume after HAPI takeover; direct `codex` launches outside `codex-nav` keep their existing global settings.
 
 ## HAPI integration
 
